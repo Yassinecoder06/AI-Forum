@@ -578,34 +578,18 @@ def run_comprehensive_test():
     tester = DrivingStyleTester(model_path="./")
     
     # Test with a new CSV file (replace with your file path)
-    test_file_path = "./Dataset/OBD-II-Dataset/2017-07-14_Seat_Leon_KA_RT_Normal.csv"  # Replace with your test file
+    test_file_path = "./cleaned_vehicle_data.csv"  # Replace with your test file
     
-    try:
-        # Run comprehensive analysis
-        results, stats = tester.test_single_driving_session(
-            csv_file_path=test_file_path,
-            traffic_state="traffic_free",  # or "traffic_jam", "traffic_free"
-            window_size=15.0,
-            step_size=7.5
-        )
+    
+    # Run comprehensive analysis
+    results, stats = tester.test_single_driving_session(
+        csv_file_path=test_file_path,
+        traffic_state="normal_traffic",  # or "traffic_jam", "traffic_free"
+        window_size=15.0,
+        step_size=7.5
+    )
         
-        return results, stats
-     
-    except FileNotFoundError:
-        print(f"❌ Test file not found: {test_file_path}")
-        print("💡 Please update the test_file_path with your actual test data file")
-        
-        # Create sample test data for demonstration
-        print("\n🎯 Creating sample test data for demonstration...")
-        create_sample_test_data()
-        
-        # Test with sample data
-        results, stats = tester.test_single_driving_session(
-            csv_file_path="sample_test_data.csv",
-            traffic_state="normal_traffic"
-        )
-        
-        return results, stats
+    return results, stats
 
 def create_sample_test_data():
     """Create sample test data for demonstration"""
@@ -626,6 +610,7 @@ def create_sample_test_data():
     sample_df.to_csv('sample_test_data.csv', index=False)
     print("✓ Sample test data created: sample_test_data.csv")
 
+    
 if __name__ == "__main__":
     # Run the comprehensive test
     results, stats = run_comprehensive_test()
