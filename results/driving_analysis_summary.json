@@ -1,0 +1,26 @@
+{
+  "analysis_timestamp": "2025-11-20T18:55:18.239996",
+  "report_summary": {
+    "total_windows": 834,
+    "style_distribution": {
+      "calm": 744,
+      "agggressive": 53,
+      "normal": 37
+    },
+    "avg_confidence": 0.9775576591491699,
+    "avg_speed": 60.41505470443712,
+    "avg_rpm": 1492.4070309340111,
+    "total_events": 6574,
+    "aggressive_ratio": 0.0,
+    "dominant_style": "calm",
+    "safety_level": "✅ GOOD - Mostly calm and normal driving"
+  },
+  "model_confidence_threshold": 0.7,
+  "safety_recommendations": [
+    "Good driving patterns maintained",
+    "Recommend: Continue current driving habits",
+    "Suggest: Periodic self-assessment",
+    "High number of sudden events - focus on smoother driving"
+  ],
+  "plot_directory": "plots"
+}
