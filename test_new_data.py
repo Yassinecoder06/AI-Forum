@@ -1,5 +1,5 @@
 # ===========================
-# TEST NEW DATA MODULE
+# TEST NEW DATA MODULE - FIXED VERSION
 # ===========================
 import pandas as pd
 import numpy as np
@@ -21,7 +21,7 @@ from IA_Forum import (
 )
 
 class DrivingStyleTester:
-    """Comprehensive testing module for new driving data"""
+    """Comprehensive testing module for new driving data - FIXED VERSION"""
     
     def __init__(self, model_path=None, scaler_path='feature_scaler.json', 
                  encoder_path='label_encoder.json'):
@@ -50,6 +50,7 @@ class DrivingStyleTester:
             self.scaler = load_scaler_from_json(scaler_path)
             self.label_encoder = load_label_encoder_from_json(encoder_path)
             print("✓ Preprocessing objects loaded successfully")
+            print(f"✓ Label encoder classes: {list(self.label_encoder.classes_)}")
         except Exception as e:
             print(f"❌ Error loading preprocessing objects: {e}")
     
@@ -158,17 +159,18 @@ class DrivingStyleTester:
         return predicted_classes_np, probabilities_np
     
     def analyze_predictions(self, df_features, predictions, probabilities):
-        """Comprehensive analysis of predictions"""
+        """Comprehensive analysis of predictions - FIXED VERSION"""
         print("Step 4: Analyzing predictions...")
         
         # Add predictions to features dataframe
         df_results = df_features.copy()
         df_results['predicted_style'] = predictions
-        df_results['predicted_style_label'] = [self.label_encoder.inverse_transform([p])[0] for p in predictions]
         
-        # Add probabilities
-        style_mapping = {0: "calm", 1: "normal", 2: "aggressive"}
-        for i, style in enumerate(['calm', 'normal', 'aggressive']):
+        # FIX: Use label encoder for consistent decoding
+        df_results['predicted_style_label'] = self.label_encoder.inverse_transform(predictions)
+        
+        # FIX: Use actual label encoder classes for probability columns
+        for i, style in enumerate(self.label_encoder.classes_):
             df_results[f'prob_{style}'] = probabilities[:, i]
         
         # Add confidence (max probability)
@@ -177,7 +179,7 @@ class DrivingStyleTester:
         return df_results
     
     def generate_comprehensive_report(self, df_results, original_df):
-        """Generate detailed report and visualizations"""
+        """Generate detailed report and visualizations - FIXED VERSION"""
         print("Step 5: Generating comprehensive report...")
         
         # Basic statistics
@@ -189,7 +191,10 @@ class DrivingStyleTester:
         avg_speed = df_results['speed_mean'].mean()
         avg_rpm = df_results['rpm_mean'].mean()
         total_events = df_results['total_events'].sum()
-        aggressive_ratio = len(df_results[df_results['predicted_style_label'] == 'aggressive']) / total_windows
+        
+        # FIX: Use actual class names from label encoder
+        aggressive_class = 'aggressive' if 'aggressive' in self.label_encoder.classes_ else self.label_encoder.classes_[0]
+        aggressive_ratio = len(df_results[df_results['predicted_style_label'] == aggressive_class]) / total_windows
         
         print("\n" + "="*60)
         print("COMPREHENSIVE DRIVING STYLE ANALYSIS REPORT")
@@ -238,7 +243,7 @@ class DrivingStyleTester:
         }
     
     def create_visualizations(self, df_results, report_stats):
-        """Create comprehensive visualizations and save them directly"""
+        """Create comprehensive visualizations and save them directly - FIXED VERSION"""
         print("\nStep 6: Creating and saving visualizations...")
         
         # Create main comprehensive plot
@@ -253,13 +258,23 @@ class DrivingStyleTester:
         print(f"✓ All visualizations saved to: {self.output_dir}/")
     
     def _create_main_plot(self, df_results, report_stats):
-        """Create the main comprehensive visualization"""
+        """Create the main comprehensive visualization - FIXED VERSION"""
         fig, axes = plt.subplots(2, 3, figsize=(20, 14))
         fig.suptitle('Driving Style Analysis - Comprehensive Report', fontsize=18, fontweight='bold')
         
+        # FIX: Use actual label encoder classes for consistent colors and labels
+        style_classes = list(self.label_encoder.classes_)
+        color_map = {
+            'aggressive': '#e74c3c',  # red
+            'calm': '#2ecc71',        # green
+            'normal': '#3498db'       # blue
+        }
+        colors = [color_map.get(style, '#95a5a6') for style in style_classes]
+        
         # 1. Driving Style Distribution (Pie chart)
         style_counts = df_results['predicted_style_label'].value_counts()
-        colors = ['#2ecc71', '#3498db', '#e74c3c']  # green, blue, red
+        # Reorder according to label encoder classes
+        style_counts = style_counts.reindex(style_classes, fill_value=0)
         axes[0, 0].pie(style_counts.values, labels=style_counts.index, autopct='%1.1f%%', 
                       colors=colors, startangle=90, textprops={'fontsize': 12})
         axes[0, 0].set_title('Driving Style Distribution', fontweight='bold', fontsize=14)
@@ -277,8 +292,8 @@ class DrivingStyleTester:
         
         # 3. Speed vs Driving Style
         speed_data = [df_results[df_results['predicted_style_label'] == style]['speed_mean'] 
-                     for style in ['calm', 'normal', 'aggressive']]
-        axes[0, 2].boxplot(speed_data, labels=['Calm', 'Normal', 'Aggressive'])
+                     for style in style_classes]
+        axes[0, 2].boxplot(speed_data, labels=[style.capitalize() for style in style_classes])
         axes[0, 2].set_ylabel('Speed (km/h)', fontsize=12)
         axes[0, 2].set_title('Speed Distribution by Driving Style', fontweight='bold', fontsize=14)
         axes[0, 2].grid(True, alpha=0.3)
@@ -286,8 +301,10 @@ class DrivingStyleTester:
         
         # 4. Event Counts by Style
         event_data = df_results.groupby('predicted_style_label')['total_events'].mean()
+        # Reorder according to label encoder classes
+        event_data = event_data.reindex(style_classes, fill_value=0)
         axes[1, 0].bar(event_data.index, event_data.values, 
-                      color=['#2ecc71', '#3498db', '#e74c3c'], alpha=0.7, edgecolor='black')
+                      color=colors, alpha=0.7, edgecolor='black')
         axes[1, 0].set_ylabel('Average Event Count', fontsize=12)
         axes[1, 0].set_title('Average Sudden Events by Driving Style', fontweight='bold', fontsize=14)
         axes[1, 0].grid(True, alpha=0.3)
@@ -295,23 +312,36 @@ class DrivingStyleTester:
         
         # 5. Timeline of Driving Style Changes
         if len(df_results) > 1:
-            axes[1, 1].plot(range(len(df_results)), df_results['predicted_style'], 
+            # Create numerical mapping for timeline
+            style_to_num = {style: i for i, style in enumerate(style_classes)}
+            timeline_values = [style_to_num[style] for style in df_results['predicted_style_label']]
+            
+            axes[1, 1].plot(range(len(df_results)), timeline_values, 
                            marker='o', linestyle='-', alpha=0.7, markersize=4)
             axes[1, 1].set_xlabel('Time Window Index', fontsize=12)
-            axes[1, 1].set_ylabel('Driving Style (0=Calm, 1=Normal, 2=Aggressive)', fontsize=12)
+            axes[1, 1].set_ylabel('Driving Style', fontsize=12)
+            axes[1, 1].set_yticks(range(len(style_classes)))
+            axes[1, 1].set_yticklabels([style.capitalize() for style in style_classes])
             axes[1, 1].set_title('Driving Style Timeline', fontweight='bold', fontsize=14)
             axes[1, 1].grid(True, alpha=0.3)
             axes[1, 1].tick_params(axis='both', which='major', labelsize=10)
         
         # 6. RPM vs Acceleration by Style
+        # Create numerical values for coloring
+        style_numeric = [style_to_num[style] for style in df_results['predicted_style_label']]
         scatter = axes[1, 2].scatter(df_results['rpm_mean'], df_results['accel_std'], 
-                                    c=df_results['predicted_style'], cmap='viridis', alpha=0.6, s=50)
+                                    c=style_numeric, cmap='viridis', alpha=0.6, s=50)
         axes[1, 2].set_xlabel('Average RPM', fontsize=12)
         axes[1, 2].set_ylabel('Acceleration STD', fontsize=12)
         axes[1, 2].set_title('RPM vs Acceleration Variability', fontweight='bold', fontsize=14)
         axes[1, 2].grid(True, alpha=0.3)
         axes[1, 2].tick_params(axis='both', which='major', labelsize=10)
-        plt.colorbar(scatter, ax=axes[1, 2], label='Driving Style')
+        
+        # Add colorbar with correct labels
+        cbar = plt.colorbar(scatter, ax=axes[1, 2])
+        cbar.set_ticks(range(len(style_classes)))
+        cbar.set_ticklabels([style.capitalize() for style in style_classes])
+        cbar.set_label('Driving Style', fontsize=12)
         
         plt.tight_layout()
         plt.savefig(os.path.join(self.output_dir, 'comprehensive_analysis.png'), dpi=300, bbox_inches='tight')
@@ -319,12 +349,14 @@ class DrivingStyleTester:
         plt.close()
     
     def _create_detailed_plot(self, df_results):
-        """Create additional detailed analysis plot"""
+        """Create additional detailed analysis plot - FIXED VERSION"""
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('Detailed Driving Style Analysis', fontsize=16, fontweight='bold')
         
+        # FIX: Use actual label encoder classes
+        styles = list(self.label_encoder.classes_)
+        
         # 1. Probability distributions for each style
-        styles = ['calm', 'normal', 'aggressive']
         for i, style in enumerate(styles):
             axes[0, 0].hist(df_results[f'prob_{style}'], bins=20, alpha=0.6, 
                            label=style.capitalize(), density=True)
@@ -366,8 +398,8 @@ class DrivingStyleTester:
         
         # 4. Style transitions (if enough data)
         if len(df_results) > 10:
-            style_changes = (df_results['predicted_style'].diff().abs() > 0).sum()
-            axes[1, 1].bar(['Style Changes'], [style_changes], color='orange', alpha=0.7, edgecolor='black')
+            style_changes = (df_results['predicted_style_label'] != df_results['predicted_style_label'].shift()).sum() - 1
+            axes[1, 1].bar(['Style Changes'], [max(0, style_changes)], color='orange', alpha=0.7, edgecolor='black')
             axes[1, 1].set_ylabel('Number of Changes', fontsize=12)
             axes[1, 1].set_title('Driving Style Transitions', fontweight='bold', fontsize=14)
             axes[1, 1].grid(True, alpha=0.3)
@@ -379,12 +411,22 @@ class DrivingStyleTester:
         plt.close()
     
     def _create_individual_plots(self, df_results, report_stats):
-        """Create individual plots for better clarity"""
+        """Create individual plots for better clarity - FIXED VERSION"""
+        
+        # FIX: Use actual label encoder classes
+        style_classes = list(self.label_encoder.classes_)
+        color_map = {
+            'aggressive': '#e74c3c',  # red
+            'calm': '#2ecc71',        # green
+            'normal': '#3498db'       # blue
+        }
+        colors = [color_map.get(style, '#95a5a6') for style in style_classes]
         
         # 1. Style distribution pie chart
         plt.figure(figsize=(10, 8))
         style_counts = df_results['predicted_style_label'].value_counts()
-        colors = ['#2ecc71', '#3498db', '#e74c3c']
+        # Reorder according to label encoder classes
+        style_counts = style_counts.reindex(style_classes, fill_value=0)
         plt.pie(style_counts.values, labels=style_counts.index, autopct='%1.1f%%', 
                 colors=colors, startangle=90, textprops={'fontsize': 14})
         plt.title('Driving Style Distribution', fontsize=16, fontweight='bold')
@@ -407,8 +449,8 @@ class DrivingStyleTester:
         # 3. Speed by driving style
         plt.figure(figsize=(10, 6))
         speed_data = [df_results[df_results['predicted_style_label'] == style]['speed_mean'] 
-                     for style in ['calm', 'normal', 'aggressive']]
-        plt.boxplot(speed_data, labels=['Calm', 'Normal', 'Aggressive'])
+                     for style in style_classes]
+        plt.boxplot(speed_data, labels=[style.capitalize() for style in style_classes])
         plt.ylabel('Speed (km/h)', fontsize=12)
         plt.title('Speed Distribution by Driving Style', fontsize=16, fontweight='bold')
         plt.grid(True, alpha=0.3)
@@ -418,8 +460,10 @@ class DrivingStyleTester:
         # 4. Events by driving style
         plt.figure(figsize=(10, 6))
         event_data = df_results.groupby('predicted_style_label')['total_events'].mean()
+        # Reorder according to label encoder classes
+        event_data = event_data.reindex(style_classes, fill_value=0)
         plt.bar(event_data.index, event_data.values, 
-                color=['#2ecc71', '#3498db', '#e74c3c'], alpha=0.7, edgecolor='black')
+                color=colors, alpha=0.7, edgecolor='black')
         plt.ylabel('Average Event Count', fontsize=12)
         plt.title('Average Sudden Events by Driving Style', fontsize=16, fontweight='bold')
         plt.grid(True, alpha=0.3)
@@ -429,15 +473,21 @@ class DrivingStyleTester:
         # 5. Driving style timeline
         if len(df_results) > 1:
             plt.figure(figsize=(12, 6))
-            plt.plot(range(len(df_results)), df_results['predicted_style'], 
+            # Create numerical mapping for timeline
+            style_to_num = {style: i for i, style in enumerate(style_classes)}
+            timeline_values = [style_to_num[style] for style in df_results['predicted_style_label']]
+            
+            plt.plot(range(len(df_results)), timeline_values, 
                     marker='o', linestyle='-', alpha=0.7, markersize=4, linewidth=2)
             plt.xlabel('Time Window Index', fontsize=12)
-            plt.ylabel('Driving Style (0=Calm, 1=Normal, 2=Aggressive)', fontsize=12)
+            plt.ylabel('Driving Style', fontsize=12)
+            plt.yticks(range(len(style_classes)), [style.capitalize() for style in style_classes])
             plt.title('Driving Style Timeline', fontsize=16, fontweight='bold')
             plt.grid(True, alpha=0.3)
             plt.savefig(os.path.join(self.output_dir, 'style_timeline.png'), dpi=300, bbox_inches='tight')
             plt.close()
-    
+
+    # The rest of your methods remain the same...
     def save_detailed_report(self, df_results, report_stats, output_path=None):
         """Save detailed report to CSV and a JSON summary inside the `results/` directory."""
         # Default paths inside results/
@@ -483,7 +533,8 @@ class DrivingStyleTester:
             'report_summary': serializable_stats,
             'model_confidence_threshold': 0.7,
             'safety_recommendations': self.generate_safety_recommendations(report_stats),
-            'plot_directory': os.path.relpath(self.output_dir, start=self.results_dir)
+            'plot_directory': os.path.relpath(self.output_dir, start=self.results_dir),
+            'label_mapping': {i: style for i, style in enumerate(self.label_encoder.classes_)}
         }
 
         with open(summary_path, 'w', encoding='utf-8') as f:
@@ -492,6 +543,7 @@ class DrivingStyleTester:
         print(f"✓ Detailed report saved to: {output_path}")
         print(f"✓ Summary statistics saved to: {summary_path}")
         print(f"✓ Visualizations saved to: {self.output_dir}/")
+        print(f"✓ Label mapping: {summary_data['label_mapping']}")
     
     def generate_safety_recommendations(self, report_stats):
         """Generate safety recommendations based on analysis"""
@@ -578,13 +630,13 @@ def run_comprehensive_test():
     tester = DrivingStyleTester(model_path="./")
     
     # Test with a new CSV file (replace with your file path)
-    test_file_path = "./cleaned_vehicle_data.csv"  # Replace with your test file
+    test_file_path = "./Dataset/OBD-II-Dataset/2017-07-13_Seat_Leon_RT_KA_Stau_Messfehler.csv"  # Replace with your test file
     
     
     # Run comprehensive analysis
     results, stats = tester.test_single_driving_session(
         csv_file_path=test_file_path,
-        traffic_state="normal_traffic",  # or "traffic_jam", "traffic_free"
+        traffic_state="traffic_free",  # or "traffic_jam", "traffic_free"
         window_size=15.0,
         step_size=7.5
     )

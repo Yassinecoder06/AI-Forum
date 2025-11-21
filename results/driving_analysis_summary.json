@@ -1,0 +1,32 @@
+{
+  "analysis_timestamp": "2025-11-21T11:25:02.191070",
+  "report_summary": {
+    "total_windows": 706,
+    "style_distribution": {
+      "aggressive": 418,
+      "calm": 255,
+      "normal": 33
+    },
+    "avg_confidence": 0.951579213142395,
+    "avg_speed": 67.21496805255565,
+    "avg_rpm": 1492.4760402774984,
+    "total_events": 6282,
+    "aggressive_ratio": 0.5920679886685553,
+    "dominant_style": "aggressive",
+    "safety_level": "⚠️  NEEDS ATTENTION - High aggressive driving detected"
+  },
+  "model_confidence_threshold": 0.7,
+  "safety_recommendations": [
+    "High level of aggressive driving detected",
+    "Recommend: Defensive driving training",
+    "Suggest: Regular vehicle maintenance check",
+    "Advise: Monitor driving patterns regularly",
+    "High number of sudden events - focus on smoother driving"
+  ],
+  "plot_directory": "plots",
+  "label_mapping": {
+    "0": "aggressive",
+    "1": "calm",
+    "2": "normal"
+  }
+}

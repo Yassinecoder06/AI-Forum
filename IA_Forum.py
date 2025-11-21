@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 # In[17]:
 
 
@@ -136,7 +133,7 @@ def enhance_features(df):
 # ===========================
 
 def extract_window_features(window):
-    """Extract comprehensive features from a time window"""
+    """Extract comprehensive features from a time window - FIXED VERSION"""
     row = {}
     
     if len(window) == 0:
@@ -208,6 +205,11 @@ def extract_window_features(window):
         row['moving_efficiency'] = 0
         row['moving_ratio'] = 0
     
+    # FIX: Calculate eco_score here instead of in labeling function
+    # This ensures the column exists for the labeling function
+    # We'll use a simple threshold for now, will be recalculated in labeling
+    row['eco_score'] = 1 if row['moving_efficiency'] > 0 else 0
+    
     # Traffic state
     row['traffic_state'] = window['traffic_state'].iloc[0]
     
@@ -255,30 +257,86 @@ def create_feature_dataset(windows):
     
     return df_features
 
-def label_driving_styles(df_features):
-    """Label driving styles based on features"""
-    # Eco-labeling based on fuel efficiency
-    eff_threshold = np.percentile(df_features['moving_efficiency'], 33)
-    df_features['eco_score'] = (df_features['moving_efficiency'] <= eff_threshold).astype(int)
-    
-    # Hybrid driving style labeling
-    def assign_driving_style(row):
-        # Aggressive if high event count or high acceleration variability
-        if (row['total_events'] > 0 or 
-            row['accel_std'] > 1.5 or 
-            row['rpm_std'] > 500):
-            return "aggressive"
-        # Calm if eco-friendly and low speed
-        elif (row['eco_score'] == 1 and 
-              row['speed_mean'] < 40 and 
-              row['accel_std'] < 0.5):
-            return "calm"
+def calculate_eco_score(row):
+    """
+    Eco score based on smoothness, efficiency and low aggression indicators.
+    Range roughly: 0 - 100
+    """
+    score = 100.0
+
+
+    # Penalise harsh behaviour
+    score -= row.get('accel_std', 0) * 15
+    score -= row.get('accel_events', 0) * 5
+    score -= row.get('brake_events', 0) * 5
+
+
+    # Penalise inefficient RPM & speed volatility
+    score -= row.get('rpm_std', 0) * 0.5
+    score -= row.get('speed_std', 0) * 2
+
+
+    # Reward efficiency & smoothness
+    score += row.get('moving_efficiency', 0) * 20
+    score += row.get('moving_ratio', 0) * 10
+
+
+    # Clamp score between 0 and 100
+    return max(0, min(100, score))
+
+def label_driving_styles(df_features: pd.DataFrame):
+    """
+    Adds:
+    - eco_score
+    - driving_style_label
+
+
+    AGGRESSIVE is applied ONLY when BOTH sudden acceleration
+    AND sudden braking are present in the same window.
+
+
+    DOES NOT store aggressiveness_score anymore.
+    """
+
+
+    df = df_features.copy()
+
+
+    # Calculate eco score
+    df['eco_score'] = df.apply(calculate_eco_score, axis=1)
+
+
+    def assign_label(row):
+        # Use direct sudden accel / brake flags if they exist in the dataset
+        # Fallback to events > 0 if not available
+        sudden_accel = row.get('sudden_accel', None)
+        sudden_brake = row.get('sudden_brake', None)
+
+
+        if sudden_accel is None:
+            sudden_accel = row.get('accel_events', 0) > 0
+        if sudden_brake is None:
+            sudden_brake = row.get('brake_events', 0) > 0
+
+
+        # ✅ Aggressive when both sudden accel AND sudden brake occur
+        if sudden_accel and sudden_brake:
+            return 'aggressive'
+
+
+        # Otherwise rely on eco score
+        score = row['eco_score']
+        if score >= 75:
+            return 'calm'
+        elif score >= 45:
+            return 'normal'
         else:
-            return "normal"
-    
-    df_features['driving_style'] = df_features.apply(assign_driving_style, axis=1)
-    
-    return df_features
+            return 'normal' # avoid false aggressive labels
+
+
+    df['driving_style'] = df.apply(assign_label, axis=1)
+    return df
+
 
 
 # In[20]:
@@ -431,7 +489,7 @@ def train_model(model, train_loader, val_loader, epochs=50, patience=10, lr=1e-3
 
     return training_history
 
-def evaluate_model(model, test_loader):
+def evaluate_model(model, test_loader, label_encoder):
     """Comprehensive model evaluation"""
     model.eval()
     all_preds = []
@@ -449,10 +507,9 @@ def evaluate_model(model, test_loader):
             all_probs.extend(probs.cpu().numpy())
             all_true.extend(batch_labels.numpy())
     
-    # Convert back to original labels
-    style_mapping = {0: "calm", 1: "normal", 2: "aggressive"}
-    pred_labels = [style_mapping[p] for p in all_preds]
-    true_labels = [style_mapping[p] for p in all_true]
+    # Use label encoder for consistent decoding
+    pred_labels = label_encoder.inverse_transform(all_preds)
+    true_labels = label_encoder.inverse_transform(all_true)
     
     # Calculate metrics
     accuracy = accuracy_score(all_true, all_preds)
@@ -462,14 +519,14 @@ def evaluate_model(model, test_loader):
     print("="*50)
     print(f"Overall Accuracy: {accuracy:.4f}")
     print("\nClassification Report:")
-    print(classification_report(true_labels, pred_labels, target_names=['calm', 'normal', 'aggressive']))
+    print(classification_report(true_labels, pred_labels, target_names=label_encoder.classes_))
     
     # Confusion Matrix
     plt.figure(figsize=(8, 6))
-    cm = confusion_matrix(true_labels, pred_labels, labels=['calm', 'normal', 'aggressive'])
+    cm = confusion_matrix(true_labels, pred_labels, labels=label_encoder.classes_)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=['calm', 'normal', 'aggressive'],
-                yticklabels=['calm', 'normal', 'aggressive'])
+                xticklabels=label_encoder.classes_,
+                yticklabels=label_encoder.classes_)
     plt.title('Confusion Matrix')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
@@ -548,7 +605,7 @@ def load_label_encoder_from_json(filepath):
 # ===========================
 
 def main():
-    """Main execution function - FIXED VERSION"""
+    """Main execution function"""
 
     # 1. Load and preprocess data
     print("Step 1: Loading and preprocessing data...")
@@ -630,7 +687,7 @@ def main():
 
     # 7. Evaluate model
     print("\nStep 7: Evaluating model...")
-    accuracy, probabilities, predictions, true_labels = evaluate_model(model, test_loader)
+    accuracy, probabilities, predictions, true_labels = evaluate_model(model, test_loader, label_encoder)
 
     # 8. Save final model (multiple formats for compatibility)
     print("\nStep 8: Saving models...")
@@ -670,10 +727,11 @@ def main():
 
 # Updated prediction function that works with the new format
 def predict_driving_style_updated(df):
-    """Updated prediction function that works with new model format"""
+    """Updated prediction function that uses the actual label encoder"""
     
     # 1. Load dependencies
     scaler = load_scaler_from_json('feature_scaler.json')
+    label_encoder = load_label_encoder_from_json('label_encoder.json')
     
     # Preprocess the data
     df = calculate_derivatives(df)
@@ -708,16 +766,13 @@ def predict_driving_style_updated(df):
     
     # Try to load safe complete model first, fall back to state dict
     try:
-        # Try safe complete model
         model = torch.load('safe_complete_model.pth', map_location='cpu')
         print("✓ Loaded safe complete model")
     except:
         try:
-            # Try complete model
             model = torch.load('complete_driving_model.pth', map_location='cpu')
             print("✓ Loaded complete model")
         except:
-            # Fall back to state dict
             checkpoint = torch.load('driving_model_state_dict.pth', map_location='cpu')
             input_dim = checkpoint['input_dim']
             model = EnhancedDrivingNet(input_dim=input_dim)
@@ -730,11 +785,10 @@ def predict_driving_style_updated(df):
         predictions = model(torch.FloatTensor(X_scaled))
         predicted_classes = torch.argmax(predictions, dim=1)
     
-    # 5. Return results
-    style_mapping = {0: "calm", 1: "normal", 2: "aggressive"}
-    results = [style_mapping[p] for p in predicted_classes.numpy()]
+    # 5. Use the actual label encoder for decoding
+    results = label_encoder.inverse_transform(predicted_classes.numpy())
     
-    return results
+    return results.tolist()
 
 if __name__ == "__main__":
     main()
